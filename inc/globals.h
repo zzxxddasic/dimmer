@@ -14,7 +14,7 @@
  */
 EXT unsigned int res[2];
 EXT unsigned int res_avg,res_pre,res_pre1;
-EXT char upflag;
+EXT char upflag,adc_comp;
 EXT unsigned char SLV_Addr;
 EXT unsigned char i2c_st_fg;
 EXT unsigned char i2c_flag;

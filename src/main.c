@@ -36,6 +36,7 @@ void main(void) {
     char inc_all;
     unsigned char abs_all;
     unsigned int timer_cnt;
+    unsigned int max_pre,max_cur;
     WDTCTL = WDTPW + WDTHOLD;	/**Set Watch time to timer mode */
 
     detect_zero=0;				/**initial global var */
@@ -44,17 +45,23 @@ void main(void) {
 
     P2SEL = 0;					/**Set P2 GPIO mode, and set to 0, turn off MOS*/
     P2SEL2 = 0;
-    P2OUT = 0xD0;
+    P2OUT = 0xF0;
     P2DIR = 0xFF;
+    CCR0 = 0xffff;
+    TAR = 0;
+    TACTL = TASSEL_2 + ID_3 + MC_1;			/**SMCLK,continuous mode*/
+    while(TAR < 60000);
+    TACTL = MC_0;
 
-    CCR0 = 0xffff;				/**delay about 100mS for cross zero detect circuit become stable*/
-    for(tmp=0;tmp<2;tmp++) {
-    	TACTL = TASSEL_2 + ID_3 + MC_1;                 //SMCLK/8,up mode
-    	while(TAR < 32768);								//delay 32768*8uS(1us*8)
-    	TAR = 0;
-    	TACTL = TASSEL_2 + ID_3 + MC_0;					//Stop timer
-    }
+    TAR = 0;
+    TACTL = TASSEL_2 + ID_3 + MC_1;			/**SMCLK,continuous mode*/
+    while(TAR < 60000);
+    TACTL = MC_0;
 
+    TAR = 0;
+    TACTL = TASSEL_2 + ID_3 + MC_1;			/**SMCLK,continuous mode*/
+    while(TAR < 60000);
+    TACTL = MC_0;
 
     BCSCTL1 = CALBC1_16MHZ;		/**Set MCLK to 16MHz*/
     DCOCTL = CALDCO_16MHZ;
@@ -62,8 +69,8 @@ void main(void) {
     FCTL2 = FWKEY + FSSEL_1 + 53;			/** MCLK/54 for Flash Timing Generator*/
 
     BCSCTL2 +=DIVS_0;						/**smclk = mclk / 1*/
-    CCTL0 = CCIE;
-    CCR0 = 0xffff;
+    //CCTL0 = CCIE;
+
 
     /**TASSEL TimerA clock source select 0=TACLK 1=ACLK 2=SMCLK 3=INCLK<br>
      * ID     TimerA input divider 0=/1 1=/2 2=/4 3=/8<br>
@@ -73,34 +80,50 @@ void main(void) {
     TACTL = TASSEL_2 + ID_3 + MC_0;			/**SMCLK,continuous mode*/
     init_flash();							/**initial flash*/
 
+
+
+    Setup_USI_Slave();
+
     /** Set ADC Repeat single channel on A1*/
     ADC10CTL1 = CONSEQ_2 + INCH_0 + ADC10DIV_1;
-    ADC10CTL0 = REFON + ADC10SHT_0 + SREF_2 + MSC + ADC10ON + ADC10IE; /** ADC10ON, interrupt enable*/
+    ADC10CTL0 = REFON + ADC10SHT_2 + SREF_2 + MSC + ADC10ON + ADC10IE; /** ADC10ON, interrupt enable*/
     ADC10DTC0 = ADC10CT;                    /**Continuous Transfer*/
     ADC10DTC1 = 2;                         	/** conversions 2 times every convert period*/
 
     ADC10SA = (unsigned int)res;			/**Set ADC10SA to address of res buffer*/
     ADC10AE0 |= 0x01;                       /** P1.0 is ADC input pin*/
 
-
-    Setup_USI_Slave();
     //-----------------------------------
     //          detect zero point threshold
     //-----------------------------------
     timer_cnt = 0;
     ch2_light = 0;
+    max_cur = 0;
+    max_pre = 0;
     while (1) {
         //ADC10CTL0 &= ~ENC;
         while (ADC10CTL1 & BUSY);
-        if (res_avg >= res_pre && res_avg > 600) {
+        if (res_avg >= res_pre && res_avg > 600 && res_avg < 1000) {
+
         	if (res_avg > timer_cnt) {
-        		//if (res_avg < 1020) {
-        			timer_cnt = res_avg;
-        			//ch2_light = 0;
-        		//}
+            	max_cur = max_pre << 3;
+            	max_cur -= max_pre;
+            	max_cur += res_avg;
+            	max_cur >>=3;
+            	max_pre = max_cur;
+
+        		timer_cnt = res_avg;
+
         	}
-        	ch2_light++;
-        	if (ch2_light == 16) {
+        	if (timer_cnt > 1000) {
+        		ch2_light = 0;
+        		timer_cnt = 0;
+        	}
+        	else {
+        		ch2_light++;
+        	}
+
+        	if (ch2_light == 64) {
         		break;
         	}
         }
@@ -110,32 +133,46 @@ void main(void) {
     }
     zero_thd = timer_cnt - 20;
 
-    //P2OUT &= 0xDF;
-    WDTCTL = WDT_MDLY_32;                     /** Set Watchdog Timer interval to ~30ms*/
-    IE1 |= WDTIE;                             /** Enable WDT interrupt*/
+
+    P2OUT = 0xD0;
     //-----------------------------------
     //          detect Power freq.
     //-----------------------------------
-    ch2_light = 2;
+    ch2_light = 100;
     TAR = 0;
     timer_cnt = 0;
-    while (timer_cnt < 15000 || timer_cnt > 20000) {
+    upflag = 0;
+    adc_comp = 0;
+    while (ch2_light > 0) {
         //ADC10CTL0 &= ~ENC;
         while (ADC10CTL1 & BUSY);
-        if (res_avg > zero_thd) {
-            TACTL = TASSEL_2 + ID_3 + MC_0; //input clk / 8
-            if (TAR > 1024 ) {
+        if (res_avg > zero_thd && upflag == 0) {
+        	upflag = 1;
+        	ch2_light--;
+            if (ch2_light == 1) {
+            	TACTL = MC_0;
                 timer_cnt = TAR;
-                ch2_light--;                  //look up cross zero point 10 times
+                                  //look up cross zero point 10 times
                 //if (ch2_light == 0) break;
             }
-
-            TAR = 0;
-            TACTL = TASSEL_2 + ID_3 + MC_1;
+            if (ch2_light == 3) {
+            	TAR = 0;
+            	TACTL = TASSEL_2 + ID_3 + MC_1; //input clk / 8
+            }
+        }
+        if (res_avg < 500) {
+        	upflag = 0;
         }
         ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
+        adc_comp = 0;
         __bis_SR_register(CPUOFF);        // LPM0, ISR will force exit
         _NOP();
+        //while(adc_comp==0) {
+        //	_NOP();
+        //	P2OUT ^= 0x0f;
+        //}
+
+
     }
 
     TACTL = TASSEL_2 + MC_0;                 //SMCLK,countinuous mode
@@ -145,7 +182,7 @@ void main(void) {
      * the timer counter 20000 in one period, the counter is 16666 for 60Hz alternate power.
      */
 
-    if (timer_cnt > 18000) {
+    if (timer_cnt > 36000) {
         CCR0 = PW_50HZ;
         P2OUT |= 0x20;
     }
@@ -154,6 +191,10 @@ void main(void) {
         P2OUT &= 0xDF;
     }
 
+    WDTCTL = WDT_MDLY_32;                     /** Set Watchdog Timer interval to ~30ms*/
+    IE1 |= WDTIE;                             /** Enable WDT interrupt*/
+
+    //P2OUT |= 0x20;
     res_pre = 0;
     pwoff_cnt = 0;
     reg_files[GROUP_SEL] = 0;

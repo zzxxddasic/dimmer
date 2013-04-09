@@ -33,10 +33,10 @@ __interrupt void watchdog_timer(void) {
 #pragma vector=ADC10_VECTOR
 __interrupt void ADC10_ISR(void) {
 	__bis_SR_register(GIE);                   // Enable nesting INT
+	ADC10CTL0 &= ~ENC;
     res_avg = (res[0] + res[1]) / 2 ;
     res_pre1 = res_pre;
     res_pre = res_avg;
-    ADC10CTL0 &= ~ENC;
     __bic_SR_register_on_exit(CPUOFF);        // Clear CPUOFF bit from 0(SR)
 }
 
