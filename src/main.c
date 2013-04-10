@@ -36,7 +36,6 @@ void main(void) {
     char inc_all;
     unsigned char abs_all;
     unsigned int timer_cnt;
-    unsigned int max_pre,max_cur;
     WDTCTL = WDTPW + WDTHOLD;	/**Set Watch time to timer mode */
 
     detect_zero=0;				/**initial global var */
@@ -45,8 +44,9 @@ void main(void) {
 
     P2SEL = 0;					/**Set P2 GPIO mode, and set to 0, turn off MOS*/
     P2SEL2 = 0;
-    P2OUT = 0xF0;
+    P2OUT = 0xD0;
     P2DIR = 0xFF;
+
     CCR0 = 0xffff;
     TAR = 0;
     TACTL = TASSEL_2 + ID_3 + MC_1;			/**SMCLK,continuous mode*/
@@ -88,7 +88,7 @@ void main(void) {
     ADC10CTL1 = CONSEQ_2 + INCH_0 + ADC10DIV_1;
     ADC10CTL0 = REFON + ADC10SHT_2 + SREF_2 + MSC + ADC10ON + ADC10IE; /** ADC10ON, interrupt enable*/
     ADC10DTC0 = ADC10CT;                    /**Continuous Transfer*/
-    ADC10DTC1 = 2;                         	/** conversions 2 times every convert period*/
+    ADC10DTC1 = 1;                         	/** conversions 2 times every convert period*/
 
     ADC10SA = (unsigned int)res;			/**Set ADC10SA to address of res buffer*/
     ADC10AE0 |= 0x01;                       /** P1.0 is ADC input pin*/
@@ -106,11 +106,11 @@ void main(void) {
         if (res_avg >= res_pre && res_avg > 600 && res_avg < 1000) {
 
         	if (res_avg > timer_cnt) {
-            	max_cur = max_pre << 3;
-            	max_cur -= max_pre;
-            	max_cur += res_avg;
-            	max_cur >>=3;
-            	max_pre = max_cur;
+//            	max_cur = max_pre << 3;
+//            	max_cur -= max_pre;
+//            	max_cur += res_avg;
+//            	max_cur >>=3;
+//            	max_pre = max_cur;
 
         		timer_cnt = res_avg;
 
@@ -134,7 +134,7 @@ void main(void) {
     zero_thd = timer_cnt - 20;
 
 
-    P2OUT = 0xD0;
+    //P2OUT = 0xD0;
     //-----------------------------------
     //          detect Power freq.
     //-----------------------------------

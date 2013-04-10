@@ -34,7 +34,13 @@ __interrupt void watchdog_timer(void) {
 __interrupt void ADC10_ISR(void) {
 	__bis_SR_register(GIE);                   // Enable nesting INT
 	ADC10CTL0 &= ~ENC;
-    res_avg = (res[0] + res[1]) / 2 ;
+	res_avg = (max_pre + res[0])/2;
+	//res_avg -= max_pre;
+	//res_avg += res[0];
+	//res_avg >>=1;
+	max_pre = res_avg;
+
+//    res_avg = res[0];//(res[0] + res[1]) / 2 ;
     res_pre1 = res_pre;
     res_pre = res_avg;
     __bic_SR_register_on_exit(CPUOFF);        // Clear CPUOFF bit from 0(SR)
