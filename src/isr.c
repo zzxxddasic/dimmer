@@ -10,6 +10,19 @@
  * @defgroup ISR
  */
 
+#pragma vector=NMI_VECTOR
+__interrupt void nmi(void) {
+	P2OUT = 0;
+	__bis_SR_register(GIE);                   //Enable nesting INT
+	ADC10CTL0 &= ~(ADC10ON + ADC10IE);
+	CCTL0 &= ~CCIE;
+	res_avg = 0;
+	while(1);
+
+
+}
+
+
 /**
  * @ingroup ISR
  * @brief Watchdog Timer interrupt service routine
@@ -35,12 +48,7 @@ __interrupt void ADC10_ISR(void) {
 	__bis_SR_register(GIE);                   // Enable nesting INT
 	ADC10CTL0 &= ~ENC;
 	res_avg = (max_pre + res[0])/2;
-	//res_avg -= max_pre;
-	//res_avg += res[0];
-	//res_avg >>=1;
 	max_pre = res_avg;
-
-//    res_avg = res[0];//(res[0] + res[1]) / 2 ;
     res_pre1 = res_pre;
     res_pre = res_avg;
     __bic_SR_register_on_exit(CPUOFF);        // Clear CPUOFF bit from 0(SR)
@@ -79,14 +87,15 @@ __interrupt void Timer_A (void) {
     else {
         ch4_light--;
     }
-    if ((P2OUT & 0x0f) == 0x00) {
+    detect_period--;
+    if ((P2OUT & 0x0f) == 0x00 && detect_period == 0) {
         detect_zero = 0;
+        //res_avg = 0;
         TACTL = TASSEL_2 + MC_0;
         ch1_light = reg_files[ABS_G0];
         ch2_light = reg_files[ABS_G1];
         ch3_light = reg_files[ABS_G2];
         ch4_light = reg_files[ABS_G3];
-        res_avg = 0;
     }
     else {
     	ADC10CTL0 |= ENC + ADC10SC;

@@ -36,7 +36,7 @@ void main(void) {
     char inc_all;
     unsigned char abs_all;
     unsigned int timer_cnt;
-    WDTCTL = WDTPW + WDTHOLD;	/**Set Watch time to timer mode */
+    WDTCTL = WDTPW + WDTHOLD;	/**Set Watch time to timer mode enable NMI @ negedge */
 
     detect_zero=0;				/**initial global var */
     SLV_Addr = 0x90;
@@ -69,7 +69,6 @@ void main(void) {
     FCTL2 = FWKEY + FSSEL_1 + 53;			/** MCLK/54 for Flash Timing Generator*/
 
     BCSCTL2 +=DIVS_0;						/**smclk = mclk / 1*/
-    //CCTL0 = CCIE;
 
 
     /**TASSEL TimerA clock source select 0=TACLK 1=ACLK 2=SMCLK 3=INCLK<br>
@@ -88,7 +87,7 @@ void main(void) {
     ADC10CTL1 = CONSEQ_2 + INCH_0 + ADC10DIV_1;
     ADC10CTL0 = REFON + ADC10SHT_2 + SREF_2 + MSC + ADC10ON + ADC10IE; /** ADC10ON, interrupt enable*/
     ADC10DTC0 = ADC10CT;                    /**Continuous Transfer*/
-    ADC10DTC1 = 1;                         	/** conversions 2 times every convert period*/
+    ADC10DTC1 = 1;                         	/** conversions 1 times every convert period*/
 
     ADC10SA = (unsigned int)res;			/**Set ADC10SA to address of res buffer*/
     ADC10AE0 |= 0x01;                       /** P1.0 is ADC input pin*/
@@ -106,12 +105,6 @@ void main(void) {
         if (res_avg >= res_pre && res_avg > 600 && res_avg < 1000) {
 
         	if (res_avg > timer_cnt) {
-//            	max_cur = max_pre << 3;
-//            	max_cur -= max_pre;
-//            	max_cur += res_avg;
-//            	max_cur >>=3;
-//            	max_pre = max_cur;
-
         		timer_cnt = res_avg;
 
         	}
@@ -134,7 +127,6 @@ void main(void) {
     zero_thd = timer_cnt - 20;
 
 
-    //P2OUT = 0xD0;
     //-----------------------------------
     //          detect Power freq.
     //-----------------------------------
@@ -142,11 +134,13 @@ void main(void) {
     TAR = 0;
     timer_cnt = 0;
     upflag = 0;
-    adc_comp = 0;
     while (ch2_light > 0) {
         //ADC10CTL0 &= ~ENC;
         while (ADC10CTL1 & BUSY);
-        if (res_avg > zero_thd && upflag == 0) {
+        if (res_avg < 500) {
+        	upflag = 0;
+        }
+        else if (res_avg > zero_thd && upflag == 0) {
         	upflag = 1;
         	ch2_light--;
             if (ch2_light == 1) {
@@ -160,18 +154,10 @@ void main(void) {
             	TACTL = TASSEL_2 + ID_3 + MC_1; //input clk / 8
             }
         }
-        if (res_avg < 500) {
-        	upflag = 0;
-        }
+
         ADC10CTL0 |= ENC + ADC10SC;             // Sampling and conversion start
-        adc_comp = 0;
         __bis_SR_register(CPUOFF);        // LPM0, ISR will force exit
         _NOP();
-        //while(adc_comp==0) {
-        //	_NOP();
-        //	P2OUT ^= 0x0f;
-        //}
-
 
     }
 
@@ -191,8 +177,9 @@ void main(void) {
         P2OUT &= 0xDF;
     }
 
-    WDTCTL = WDT_MDLY_32;                     /** Set Watchdog Timer interval to ~30ms*/
+    WDTCTL = WDTPW + WDTNMI + WDTNMIES + WDTTMSEL + WDTCNTCL;                     /** Set Watchdog Timer interval to ~30ms*/
     IE1 |= WDTIE;                             /** Enable WDT interrupt*/
+    IE1 |= NMIIE;							  /** Enable NMI interrupt */
 
     //P2OUT |= 0x20;
     res_pre = 0;
@@ -230,6 +217,7 @@ void main(void) {
                 detect_zero = 1;
                 TAR = 0;
                 TACTL = TASSEL_2 + MC_1;
+                detect_period = 128;                     //constrain minimize time between two zero detecting
             }
             else {
             	while (ADC10CTL1 & BUSY);
